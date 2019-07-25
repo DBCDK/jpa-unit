@@ -35,7 +35,7 @@ public class JpaUnitContext implements ExecutionContext {
 
     private PersistenceUnitDescriptor descriptor;
 
-    private JpaUnitContext(final Class<?> testClass) {
+    private JpaUnitContext(final Class<?> testClass, Map<String, Object> default_properties) {
         final MetadataExtractor extractor = new MetadataExtractor(testClass);
         final AnnotationInspector<PersistenceContext> pcInspector = extractor.persistenceContext();
         final AnnotationInspector<PersistenceUnit> puInspector = extractor.persistenceUnit();
@@ -52,7 +52,7 @@ public class JpaUnitContext implements ExecutionContext {
 
         checkArgument(pcFields.size() <= 1, "Only single field is allowed to be annotated with @PersistenceContext");
 
-        Map<String, Object> properties;
+        Map<String, Object> properties=default_properties;
         String unitName;
 
         if (!puFields.isEmpty()) {
@@ -61,14 +61,14 @@ public class JpaUnitContext implements ExecutionContext {
                     .format("Field %s annotated with @PersistenceUnit is not of type EntityManagerFactory.", persistenceField.getName()));
             final PersistenceUnit persistenceUnit = puInspector.fetchFromField(persistenceField);
             unitName = persistenceUnit.unitName();
-            properties = Collections.emptyMap();
+            properties = default_properties;
         } else {
             persistenceField = pcFields.get(0);
             checkArgument(persistenceField.getType().equals(EntityManager.class),
                     String.format("Field %s annotated with @PersistenceContext is not of type EntityManager.", persistenceField.getName()));
             final PersistenceContext persistenceContext = pcInspector.fetchFromField(persistenceField);
             unitName = persistenceContext.unitName();
-            properties = getPersistenceContextProperties(persistenceContext);
+            properties = getPersistenceContextProperties(persistenceContext, default_properties);
         }
 
         final PersistenceUnitDescriptorLoader pudLoader = new PersistenceUnitDescriptorLoader();
@@ -91,11 +91,15 @@ public class JpaUnitContext implements ExecutionContext {
     }
 
     public static synchronized JpaUnitContext getInstance(final Class<?> testClass) {
-        return CTX_MAP.computeIfAbsent(testClass, JpaUnitContext::new);
+        return CTX_MAP.computeIfAbsent(testClass, k-> new JpaUnitContext(k, Collections.emptyMap() ));
     }
 
-    private static Map<String, Object> getPersistenceContextProperties(final PersistenceContext persistenceContext) {
-        final Map<String, Object> properties = new HashMap<>();
+    public static synchronized JpaUnitContext getInstance(final Class<?> testClass, Map<String, Object> properties) {
+        return CTX_MAP.computeIfAbsent(testClass, k-> new JpaUnitContext(k, properties) );
+    }
+    
+    private static Map<String, Object> getPersistenceContextProperties(final PersistenceContext persistenceContext, Map<String, Object> default_properties) {
+        final Map<String, Object> properties = new HashMap<>(default_properties);
         for (final PersistenceProperty property : persistenceContext.properties()) {
             String propertyValue = property.value();
             Matcher matcher = PROPERTY_PATTERN.matcher(propertyValue);
