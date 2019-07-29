@@ -1,6 +1,9 @@
 package eu.drus.jpa.unit.api;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.extension.AfterAllCallback;
@@ -17,7 +20,24 @@ import eu.drus.jpa.unit.spi.TestInvocation;
 
 public class JpaUnit implements BeforeAllCallback, AfterAllCallback, BeforeEachCallback, AfterEachCallback {
 
+
+    @FunctionalInterface
+    public interface PropertyCreatingBlock {
+        Map<String,String> createProperties();
+    }
+
     private final DecoratorExecutor executor = new DecoratorExecutor();
+    private final PropertyCreatingBlock propertyCreatingBlock;
+
+    public JpaUnit() {
+        this.propertyCreatingBlock = Collections::emptyMap;
+    }
+
+
+    public JpaUnit(PropertyCreatingBlock propertyCreatingBlock) {
+        this.propertyCreatingBlock = propertyCreatingBlock;
+    }
+
 
     @Override
     public void beforeAll(final ExtensionContext context) throws Exception {
@@ -40,7 +60,8 @@ public class JpaUnit implements BeforeAllCallback, AfterAllCallback, BeforeEachC
     }
 
     private TestInvocation createTestMethodInvocation(final ExtensionContext context, final boolean considerExceptions) {
-        final JpaUnitContext ctx = JpaUnitContext.getInstance(context.getTestClass().get());
+        final Map<String, Object> properties = new HashMap<>(propertyCreatingBlock.createProperties());
+        final JpaUnitContext ctx = JpaUnitContext.getInstance(context.getTestClass().get(), properties);
 
         return new TestInvocation() {
 
